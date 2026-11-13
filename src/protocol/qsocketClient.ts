@@ -252,10 +252,14 @@ export function connectToQSocketRelay(
       return;
     }
     if (!handshakeComplete) {
-      const hint =
-        ev.code === 1006
-          ? `No peer is listening on ${resolved.uri} Make sure "qsock -l ${resolved.uri}" is running on the remote host.`
-          : `Relay closed connection during handshake (code ${ev.code}${ev.reason ? `: ${ev.reason}` : ""}).`;
+      if (ev.code === 1006) {
+        // The relay refuses a knock nobody is listening for: log the failed
+        // bind here, the termination line carries the reason.
+        emitLog("error", "QSRN", `Bind attempt failed for ${resolved.uri}`);
+        cleanup(`No peer is listening on ${resolved.uri}`, true);
+        return;
+      }
+      const hint = `Relay closed connection during handshake (code ${ev.code}${ev.reason ? `: ${ev.reason}` : ""}).`;
       emitLog("error", "QSRN", hint);
       cleanup(hint, true);
     } else {

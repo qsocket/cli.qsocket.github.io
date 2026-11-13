@@ -14,8 +14,9 @@ import type { ConnectionPhase } from "../protocol/qsocketClient";
 interface HeaderProps {
   phase: ConnectionPhase;
   e2eActive: boolean;
-  onResetToHome?: () => void;
 }
+
+const QSOCKET_WEBSITE = "https://www.qsocket.io";
 
 const TOP_NAV_LINKS = [
   {
@@ -30,7 +31,7 @@ const TOP_NAV_LINKS = [
   },
 ] as const;
 
-export function Header({ phase, e2eActive, onResetToHome }: HeaderProps) {
+export function Header({ phase, e2eActive }: HeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const isConnecting =
@@ -46,10 +47,13 @@ export function Header({ phase, e2eActive, onResetToHome }: HeaderProps) {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
         {/* Brand + Top Links */}
         <div className="flex min-w-0 items-center gap-6">
-          <button
-            type="button"
-            onClick={onResetToHome}
-            className="group flex shrink-0 items-center gap-2.5 text-left focus:outline-none"
+          {/* A new tab keeps an open session alive, like the other nav links */}
+          <a
+            href={QSOCKET_WEBSITE}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="qsocket.io"
+            className="group flex shrink-0 items-center gap-2.5 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
           >
             <span
               className="relative flex size-6 items-center justify-center"
@@ -65,7 +69,7 @@ export function Header({ phase, e2eActive, onResetToHome }: HeaderProps) {
               <Terminal className="size-3" />
               Web CLI
             </span>
-          </button>
+          </a>
 
           <nav
             aria-label="Primary"

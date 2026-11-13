@@ -155,6 +155,17 @@ export function nextUID(uid: Uint8Array): Uint8Array {
 }
 
 /**
+ * Returns the secret part of a `qs://<secret>` URI, the input unchanged when it
+ * carries no `qs://` scheme. The secret field shows the scheme as a fixed
+ * prefix and keeps only this part, so a pasted or typed URI does not end up
+ * with the scheme twice.
+ */
+export function stripURIScheme(value: string): string {
+  const trimmed = value.trimStart();
+  return trimmed.startsWith(URI_SCHEME) ? trimmed.slice(URI_SCHEME.length) : value;
+}
+
+/**
  * Extracts initial secret from window.location.hash if present.
  */
 export function extractSecretFromUrlHash(hash: string): string {

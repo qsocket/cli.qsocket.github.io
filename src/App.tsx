@@ -36,7 +36,22 @@ import {
   extractSecretFromUrlHash,
   generateRandomUUIDv4,
   resolveQSocketSecret,
+  stripURIScheme,
 } from "./protocol/secret";
+
+const MASK = "••••••••";
+
+/**
+ * Replaces every secret-bearing token (the canonical secret, which also hides
+ * the qs:// URI, and the knock UID) in a log line with a mask.
+ */
+function maskSecrets(text: string, tokens: readonly string[]): string {
+  let out = text;
+  for (const token of tokens) {
+    out = out.split(token).join(MASK);
+  }
+  return out;
+}
 
 function formatLogTime(timestamp = Date.now()): string {
   const date = new Date(timestamp);
@@ -47,11 +62,27 @@ function formatLogTime(timestamp = Date.now()): string {
 }
 
 export default function App() {
-  // Pre-populate secret field from URL hash on initial load
+  // The secret field holds the part after the fixed qs:// prefix it shows.
+  // Pre-populate it from the URL hash on initial load.
   const [secretInput, setSecretInput] = useState<string>(() =>
-    extractSecretFromUrlHash(window.location.hash)
+    stripURIScheme(extractSecretFromUrlHash(window.location.hash))
   );
+  const secretUri = secretInput.trim()
+    ? `${URI_SCHEME}${secretInput.trim()}`
+    : "";
   const [showSecret, setShowSecret] = useState<boolean>(true);
+
+  // Secret-bearing tokens of the current connection, and whether the logs
+  // have to hide them. Refs, so the callbacks of a running connection mask
+  // the lines they write according to the current mask toggle.
+  const secretTokensRef = useRef<string[]>([]);
+  const showSecretRef = useRef(showSecret);
+  showSecretRef.current = showSecret;
+  const maskLog = useCallback(
+    (text: string) =>
+      showSecretRef.current ? text : maskSecrets(text, secretTokensRef.current),
+    []
+  );
   const [advancedOpen, setAdvancedOpen] = useState<boolean>(false);
 
   // Advanced connection options matching qsock / qsocket-go flags
@@ -82,7 +113,7 @@ export default function App() {
     const onHashChange = () => {
       const hashSecret = extractSecretFromUrlHash(window.location.hash);
       if (hashSecret && !activeConnRef.current) {
-        setSecretInput(hashSecret);
+        setSecretInput(stripURIScheme(hashSecret));
       }
     };
     window.addEventListener("hashchange", onHashChange);
@@ -98,11 +129,11 @@ export default function App() {
 
   // Live preview of resolved canonical qs:// URI and Base64 knock UID
   const secretResolution = useMemo(() => {
-    if (!secretInput.trim()) {
+    if (!secretUri) {
       return { resolved: null, error: null };
     }
     try {
-      const resolved = resolveQSocketSecret(secretInput, normalizeUuid);
+      const resolved = resolveQSocketSecret(secretUri, normalizeUuid);
       return { resolved, error: null };
     } catch (err) {
       return {
@@ -110,7 +141,7 @@ export default function App() {
         error: err instanceof Error ? err.message : "Invalid secret format.",
       };
     }
-  }, [secretInput, normalizeUuid]);
+  }, [secretUri, normalizeUuid]);
 
   const previewWsUrl = useMemo(() => {
     if (!secretResolution.resolved) return null;
@@ -123,6 +154,15 @@ export default function App() {
       return null;
     }
   }, [relayServer, secretResolution.resolved]);
+
+  // The inspector re-renders, so its log lines follow the mask toggle.
+  const displayLogs = useMemo(
+    () =>
+      showSecret
+        ? logs
+        : logs.map((l) => ({ ...l, message: maskLog(l.message) })),
+    [logs, showSecret, maskLog]
+  );
 
   const isBusy =
     phase === "ws_connecting" ||
@@ -137,10 +177,10 @@ export default function App() {
   }, []);
 
   const startConnection = useCallback(() => {
-    const targetSecret = secretInput.trim();
+    const targetSecret = secretUri;
     if (!targetSecret) {
       const msg =
-        "Please enter a QSocket secret (e.g. qs://<uuid>) or click qsock -g to generate one.";
+        "Please enter a QSocket secret (e.g. a UUID) or click qsock -g to generate one.";
       const now = Date.now();
       setPhase("error");
       setPhaseDetail(msg);
@@ -162,7 +202,13 @@ export default function App() {
 
     // Validate secret upfront
     try {
-      resolveQSocketSecret(targetSecret, normalizeUuid);
+      const resolved = resolveQSocketSecret(targetSecret, normalizeUuid);
+      // Longest first, so a token containing another is masked whole.
+      secretTokensRef.current = [
+        resolved.canonicalSecret,
+        resolved.uidBase64,
+        resolved.uidHex,
+      ].sort((a, b) => b.length - a.length);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Invalid QSocket secret.";
       const now = Date.now();
@@ -198,7 +244,7 @@ export default function App() {
         null,
         "",
         `${window.location.pathname}${window.location.search}#${encodeURIComponent(
-          targetSecret
+          secretInput.trim()
         )}`
       );
     } catch {
@@ -243,7 +289,7 @@ export default function App() {
                   : "\x1b[36m";
           const timeStr = formatLogTime(entry.timestamp);
           terminalRef.current?.writeln(
-            `${color}[${timeStr}]\x1b[0m \x1b[90m[${entry.stage}]\x1b[0m ${entry.message}`
+            `${color}[${timeStr}]\x1b[0m \x1b[90m[${entry.stage}]\x1b[0m ${maskLog(entry.message)}`
           );
         }
       },
@@ -268,32 +314,33 @@ export default function App() {
         const timeStr = formatLogTime();
         if (hadError) {
           terminalRef.current?.writeln(
-            `\r\n\x1b[1;31m[${timeStr}]\x1b[0m Connection terminated: ${reason}\r\n`
+            `\x1b[1;31m[${timeStr}]\x1b[0m Connection terminated: ${maskLog(reason)}\r\n`
           );
         } else {
           terminalRef.current?.writeln(
-            `\r\n\x1b[90m[${timeStr}]\x1b[0m ${reason}\r\n`
+            `\r\n\x1b[90m[${timeStr}]\x1b[0m ${maskLog(reason)}\r\n`
           );
         }
       },
     });
 
     activeConnRef.current = conn;
-  }, [secretInput, relayServer, e2eEnabled, normalizeUuid, execCommand]);
+  }, [secretUri, secretInput, relayServer, e2eEnabled, normalizeUuid, execCommand, maskLog]);
 
   const handleTerminalInput = useCallback((data: string | Uint8Array) => {
     activeConnRef.current?.sendInput(data);
   }, []);
 
   const handleGenerateSecret = () => {
-    const newUri = `${URI_SCHEME}${generateRandomUUIDv4()}`;
-    setSecretInput(newUri);
+    // The field shows qs:// as its prefix, it only takes the UUID itself.
+    const newSecret = generateRandomUUIDv4();
+    setSecretInput(newSecret);
     try {
       window.history.replaceState(
         null,
         "",
         `${window.location.pathname}${window.location.search}#${encodeURIComponent(
-          newUri
+          newSecret
         )}`
       );
     } catch {
@@ -316,9 +363,10 @@ export default function App() {
   };
 
   const handleCopyShareUrl = async () => {
-    if (!secretInput.trim()) return;
+    const secret = secretInput.trim();
+    if (!secret) return;
     const shareUrl = `${window.location.origin}${window.location.pathname}#${encodeURIComponent(
-      secretInput.trim()
+      secret
     )}`;
     try {
       await navigator.clipboard.writeText(shareUrl);
@@ -345,9 +393,6 @@ export default function App() {
       <Header
         phase={phase}
         e2eActive={sessionMeta?.e2eEnabled ?? e2eEnabled}
-        onResetToHome={() => {
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        }}
       />
 
       {/* Main Content */}
@@ -399,23 +444,31 @@ export default function App() {
             }}
             className="flex flex-col gap-2.5 sm:flex-row"
           >
-            <div className="relative flex min-w-0 flex-1 items-center">
-              <KeyRound className="pointer-events-none absolute left-3.5 size-4 text-primary/80" />
+            <div className="flex min-w-0 flex-1 items-center rounded-lg border border-surface-container-highest bg-surface-container-lowest focus-within:border-primary has-[input:disabled]:opacity-60">
+              <KeyRound className="pointer-events-none ml-3.5 size-4 shrink-0 text-primary/80" />
+              {/* The scheme is a fixed prefix, not part of the editable value */}
+              <label
+                htmlFor="qs-secret"
+                className="ml-2.5 shrink-0 cursor-text select-none font-mono text-sm text-outline/60"
+              >
+                {URI_SCHEME}
+              </label>
               <input
+                id="qs-secret"
                 type={showSecret ? "text" : "password"}
                 value={secretInput}
                 onChange={(e) => {
-                  setSecretInput(e.target.value);
+                  setSecretInput(stripURIScheme(e.target.value));
                 }}
                 disabled={isBusy || isConnected}
                 spellCheck={false}
                 autoComplete="off"
                 autoCapitalize="off"
-                placeholder="qs://f81d4fae-7dec-41d0-a765-00a0c91e6bf6 or secret phrase..."
+                placeholder="f81d4fae-7dec-41d0-a765-00a0c91e6bf6 or secret phrase..."
                 aria-label="QSocket connection secret"
-                className="w-full rounded-lg border border-surface-container-highest bg-surface-container-lowest py-2.5 pr-24 pl-10 font-mono text-sm text-on-surface placeholder:text-outline/75 focus:border-primary focus:outline-none disabled:opacity-60"
+                className="min-w-0 flex-1 bg-transparent py-2.5 pr-2 font-mono text-sm text-on-surface placeholder:text-outline/75 focus:outline-none"
               />
-              <div className="absolute right-2 flex items-center gap-1">
+              <div className="mr-2 flex shrink-0 items-center gap-1">
                 <button
                   type="button"
                   onClick={() => setShowSecret((s) => !s)}
@@ -609,7 +662,7 @@ export default function App() {
         {/* E2E Protocol Handshake Stepper & Trace Log */}
         <ProtocolInspector
           phase={phase}
-          logs={logs}
+          logs={displayLogs}
           e2eEnabled={sessionMeta?.e2eEnabled ?? e2eEnabled}
         />
 
@@ -617,7 +670,7 @@ export default function App() {
         <TerminalWorkspace
           ref={terminalRef}
           phase={phase}
-          phaseDetail={phaseDetail}
+          phaseDetail={showSecret ? phaseDetail : maskLog(phaseDetail)}
           sessionMeta={sessionMeta}
           stats={stats}
           onInput={handleTerminalInput}
