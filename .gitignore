@@ -1,0 +1,27 @@
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Secrets and local overrides
+.env
+.env.*
+*.local
+
+# Editor and OS state
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs and crash dumps
+*.log
+core
+core.*
+
+# Source archives
+*.zip
+
+# package-lock.json is not ignored: it is the only lockfile and the npm ci
+# fallback in build.sh needs it. Commit bun.lock too once bun install runs.

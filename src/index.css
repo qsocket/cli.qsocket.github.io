@@ -1,0 +1,93 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+@theme {
+  --color-surface: #121411;
+  --color-surface-dim: #121411;
+  --color-surface-bright: #373a36;
+  --color-surface-container-lowest: #0c0f0c;
+  --color-surface-container-low: #1a1c19;
+  --color-surface-container: #1e201d;
+  --color-surface-container-high: #282b27;
+  --color-surface-container-highest: #333531;
+  --color-surface-variant: #333531;
+  --color-on-surface: #e2e3dd;
+  --color-on-surface-variant: #c2c9be;
+  --color-outline: #8c9389;
+  --color-outline-variant: #424941;
+
+  --color-primary: #a4d2a6;
+  --color-on-primary: #0f3819;
+  --color-primary-container: #709b73;
+  --color-on-primary-container: #063113;
+  --color-inverse-primary: #3f6744;
+
+  --color-secondary: #b8ccb7;
+  --color-on-secondary: #243426;
+  --color-secondary-container: #3a4b3b;
+  --color-on-secondary-container: #a7baa6;
+
+  --color-tertiary: #f8b4c9;
+  --color-on-tertiary: #4f2132;
+
+  --color-error: #ffb4ab;
+  --color-on-error: #690005;
+  --color-error-container: #93000a;
+  --color-on-error-container: #ffdad6;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body {
+    margin: 0;
+    background-color: var(--color-surface);
+    color: var(--color-on-surface);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+.qs-grid-dots {
+  background-image: radial-gradient(rgb(164 210 166 / 0.14) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* xterm.js viewport & scrollbar integration */
+.xterm {
+  padding: 6px 10px;
+  height: 100%;
+}
+
+.xterm .xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: #333531 transparent;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background-color: #333531;
+  border-radius: 9999px;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background-color: #424941;
+}
